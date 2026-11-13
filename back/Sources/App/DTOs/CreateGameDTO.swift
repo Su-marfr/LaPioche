@@ -23,3 +23,5 @@ struct CreateGameDTO: Content, Validatable {
         Game(title: title, minPlayers: minPlayers, maxPlayers: maxPlayers, durationMinutes: durationMinutes)
     }
 }
+
+typealias UpdateGameDTO = CreateGameDTO
