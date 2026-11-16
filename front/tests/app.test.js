@@ -65,6 +65,42 @@ test("a validation error is shown in French and the dialog stays open", async ()
   assertTrue(app.$("#game-dialog").open, "la boîte devrait rester ouverte");
 });
 
+test("deleting a game removes it from the list", async () => {
+  let games = [catan];
+
+  const app = await mountApp ({
+    "GET /games": () => games,
+    "DELETE /games/g1": () => {
+      games = [];
+      return [204]; 
+    },
+  });
+  await waitFor(() => app.$$("#games-list .card").length === 1 );
+  
+  app.click("Supprimer", cardOf(app, "Catan"));
+  await waitFor(() => app.$("#delete-game-dialog").open, "la confirmation de suppression");
+  app.click("Confirmer la suppression", app.$("#delete-game-dialog"));
+  await waitFor(() => app.$$("#games-list .card").length === 0, "le jeu disparaît");
+
+  assertTrue(!app.$("#delete-game-dialog").open, "la boîte devrait se fermer");
+  assertTrue(!app.$("#games-empty").hidden, "le message de liste vide devrait apparaître");
+});
+
+test("a deletion conflict is shown in French when deleting a game with loan history and the dialog stays open", async () => {
+  const app = await mountApp({
+    "GET /games": [catan],
+    "DELETE /games/g1": [409, {error: true, reason: "A game with loans cannot be deleted"}]
+  });
+  await waitFor(() => app.$$("#games-list .card").length === 1);
+  app.click("Supprimer", cardOf(app, "Catan"));
+  await waitFor(() => app.$("#delete-game-dialog").open, "la confirmaton de suppression");
+  app.click("Confirmer la suppression", app.$("#delete-game-dialog"));
+  await waitFor(() => !app.$("#delete-game-dialog .form-error").hidden, "le message d'erreur");
+  assertTrue(app.$("#delete-game-dialog").open, "la boîte devrait rester ouverte");
+  assertEqual(app.$("#delete-game-dialog .form-error").textContent, "Suppression impossible : ce jeu a un historique d'emprunts, conservé même quand le jeu est rendu.");
+  assertEqual(app.$$("#games-list .card").length, 1, "le jeu devrait toujours être dans la liste");
+});
+
 // --- Emprunts
 
 test("borrowing a game sends the game and the chosen member", async () => {

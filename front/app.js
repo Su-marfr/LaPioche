@@ -106,6 +106,8 @@ function gameCard(game) {
   if (game.isAvailable) {
     actions.append(button("Emprunter", () => openBorrowDialog(game), "primary"));
   }
+    actions.append(button("Modifier", () => openEditGameDialog(game)));
+    actions.append(button("Supprimer", () => openDeleteGameDialog(game), "danger"));
 
   return el(
     "li",
@@ -119,20 +121,61 @@ function gameCard(game) {
 const gameDialog = $("#game-dialog");
 const gameForm = $("#game-form");
 
+const deleteGameDialog = $("#delete-game-dialog");
+const deleteGameForm = $("#delete-game-form");
+
+let editingGame = null;
+let deletingGame = null;
+
+function openEditGameDialog(game) {
+  editingGame = game;
+  $("#game-dialog-title").textContent = "Modifier un jeu";
+  gameForm.elements.title.value = game.title;
+  gameForm.elements.minPlayers.value = game.minPlayers;
+  gameForm.elements.maxPlayers.value = game.maxPlayers;
+  gameForm.elements.durationMinutes.value = game.durationMinutes;
+
+  showFormError(gameDialog, null);
+  gameDialog.showModal();
+}
+
+function openDeleteGameDialog(game) {
+  deletingGame = game;
+
+  $("#delete-game-message").textContent = `Voulez-vous vraiment supprimer le jeu ${game.title} ?`;
+
+  showFormError(deleteGameDialog, null);
+  deleteGameDialog.showModal();
+}
+
 $("#add-game").addEventListener("click", () => {
+  editingGame = null;
+  $("#game-dialog-title").textContent = "Ajouter un jeu";
   gameForm.reset();
   showFormError(gameDialog, null);
   gameDialog.showModal();
 });
 
-bindSubmit(gameDialog, gameForm, (data) =>
-  api.createGame({
+bindSubmit(gameDialog, gameForm, async (data) => {
+  const game = {
     title: data.get("title").trim(),
     minPlayers: Number(data.get("minPlayers")),
     maxPlayers: Number(data.get("maxPlayers")),
     durationMinutes: Number(data.get("durationMinutes")),
-  }),
-);
+  };
+
+  if (editingGame) {
+    await api.updateGame(editingGame.id, game);
+    editingGame = null;
+  } else {
+    await api.createGame(game);
+  }
+});
+
+bindSubmit(deleteGameDialog, deleteGameForm, async () => {
+  await api.deleteGame(deletingGame.id);
+  deletingGame = null;
+});
 
 // --- Emprunts --------------------------------------------------------------
 

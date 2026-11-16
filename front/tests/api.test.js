@@ -47,6 +47,33 @@ test("borrow sends the game and the member", async () => {
   assertEqual(calls[0].body, { gameID: "g1", memberID: "m1" });
 });
 
+test("updateGame sends a JSON PUT", async () => {
+  const { fetch, calls } = fakeApi({ "PUT /games/g1": [200, { id: "g1" }] });
+  const game = { title: "Catan", minPlayers: 2, maxPlayers: 4, durationMinutes: 90};
+  const updated = await withFakeFetch(fetch, () => api.updateGame("g1", game));
+  assertEqual(calls[0].method, "PUT");
+  assertEqual(calls[0].path, "/games/g1");
+  assertEqual(calls[0].body, game);
+  assertEqual(updated.id, "g1");
+});
+
+test("deleteGame sends DELETE", async () => {
+  const { fetch, calls } = fakeApi({ "DELETE /games/g1": [204]});
+  const result = await withFakeFetch(fetch, () => api.deleteGame("g1"));
+  assertEqual(calls[0].method, "DELETE");
+  assertEqual(calls[0].path, "/games/g1");
+  assertEqual(result, null);
+});
+
+test("deleteGame returns a French error for game with loan history", async () => {
+  const { fetch, calls } = fakeApi({ "DELETE /games/g1": [409, {error: true, reason: "A game with loans cannot be deleted"}]});
+  const error = await expectError(withFakeFetch(fetch, () => api.deleteGame("g1")));
+  assertEqual(calls[0].method, "DELETE");
+  assertEqual(calls[0].path, "/games/g1");
+  assertEqual(error.status, 409);
+  assertEqual(error.message, "Suppression impossible : ce jeu a un historique d'emprunts, conservé même quand le jeu est rendu.");
+});
+
 // --- erreurs
 
 // Attend qu'une promesse échoue et renvoie l'erreur (échoue si elle réussit).
