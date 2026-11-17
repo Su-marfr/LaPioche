@@ -7,6 +7,8 @@ struct MemberController: RouteCollection {
         members.get(use: index)
         members.post(use: create)
         members.get(":memberID", use: show)
+        members.put(":memberID", use: update)
+        members.delete(":memberID", use: delete)
     }
 
     @Sendable
@@ -25,7 +27,6 @@ struct MemberController: RouteCollection {
         guard !emailTaken else {
             throw Abort(.conflict, reason: "A member with this email already exists")
         }
-
         let member = dto.toModel()
         try await member.save(on: req.db)
         return try await member.toDTO().encodeResponse(status: .created, for: req)
@@ -40,5 +41,53 @@ struct MemberController: RouteCollection {
             throw Abort(.notFound, reason: "Member not found")
         }
         return member.toDTO()
+    }
+
+    @Sendable
+    func update(req: Request) async throws -> Response {
+        guard let memberID = req.parameters.get("memberID", as: UUID.self) else {
+            throw Abort(.badRequest, reason: "Invalid member id")
+        }
+        guard let member = try await Member.find(memberID, on: req.db) else {
+            throw Abort(.notFound, reason: "Member not found")
+        }
+
+        try UpdateMemberDTO.validate(content: req)
+
+        let dto = try req.content.decode(UpdateMemberDTO.self)
+
+        let emailTaken = try await Member.query(on: req.db)
+            .filter(\.$email == dto.email)
+            .filter(\.$id != memberID)
+            .count() > 0
+        guard !emailTaken else {
+            throw Abort(.conflict, reason: "A member with this email already exists")
+        }
+
+        member.name = dto.name
+        member.email = dto.email
+
+        try await member.save(on: req.db)
+        return try await member.toDTO().encodeResponse(status: .ok, for: req)
+    }
+    
+    @Sendable
+    func delete(req: Request) async throws -> HTTPStatus {
+        guard let memberID = req.parameters.get("memberID", as: UUID.self) else {
+            throw Abort(.badRequest, reason: "Invalid member id")
+        }
+        guard let member = try await Member.find(memberID, on: req.db) else {
+            throw Abort(.notFound, reason: "Member not found")
+        }
+        try await req.db.transaction { db in
+            let hasLoans =  try await Loan.query(on: db)
+                .filter(\.$member.$id == memberID)
+                .count() > 0
+            guard !hasLoans else {
+                throw Abort(.conflict, reason: "A member with loans cannot be deleted")
+            }
+            try await member.delete(on: db)
+        }
+        return .noContent
     }
 }

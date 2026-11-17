@@ -13,3 +13,4 @@ struct CreateMemberDTO: Content, Validatable {
         Member(name: name, email: email)
     }
 }
+typealias UpdateMemberDTO = CreateMemberDTO
