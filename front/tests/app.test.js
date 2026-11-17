@@ -135,6 +135,56 @@ test("members tab lists the members", async () => {
   assertIncludes(app.$("#members-list .row").textContent, "camille@example.com");
 });
 
+test("editing a member opens a form with its information", async () => {
+  const app = await mountApp({ "GET /members": [camille]}, { hash: "#members"});
+  await waitFor(() => app.$$("#members-list .row").length === 1);
+  app.click("Modifier", app.$("#members-list .row"));
+  await waitFor(() => app.$("#member-dialog").open, "le formulaire de modification");
+  const form = app.$("#member-form");
+  assertEqual(form.elements.name.value, "Camille");
+  assertEqual(form.elements.email.value, "camille@example.com");
+  assertEqual(app.$("#member-dialog-title").textContent, "Modifier un·e adhérent·e");
+});
+
+test("editing a member updates the form then reloads the list", async () => {
+  let members = [camille];
+  const updatedMember = {id: "m1", name: "Camille Pasquette", email: "camille.pasquette@example.com"};
+  const app = await mountApp({
+    "GET /members": () => members, 
+    "PUT /members/m1": () => {
+      members = [updatedMember];
+      return [200, updatedMember];
+    },
+  }, { hash: "#members" });
+  await waitFor(() => app.$$("#members-list .row").length === 1);
+  app.click("Modifier", app.$("#members-list .row"));
+  const form = app.$("#member-form");
+  form.elements.name.value = "Camille Pasquette";
+  form.elements.email.value = "camille.pasquette@example.com";
+  form.requestSubmit();
+  await waitFor(() => app.calls.some((call) => call.method === "PUT" && call.path === "/members/m1"), "l'appel PUT /members/m1");
+  assertEqual(app.calls.find((call) => call.method === "PUT").body, {name: "Camille Pasquette", email: "camille.pasquette@example.com"});
+  await waitFor(() => app.$("#members-list").textContent.includes("Camille Pasquette"), "la liste actualisée");
+  assertIncludes(app.$("#members-list").textContent, "camille.pasquette@example.com");
+  assertTrue(!app.$("#member-dialog").open, "le formulaire devrait se fermer");
+});
+
+test("a conflict is shown when editing a member's email with another member's email", async () => {
+  const anotherMember = { id: "m2", name: "Charlotte", email: "charlotte@example.com" };
+  const app = await mountApp({ 
+    "GET /members": [camille, anotherMember],
+    "PUT /members/m1": [409, { error: true, reason: "A member with this email already exists"}],
+  }, { hash : "#members" });
+  await waitFor(() => app.$$("#members-list .row").length === 2);
+  app.click("Modifier", app.$$("#members-list .row")[0]);
+  const form = app.$("#member-form");
+  form.elements.email.value = "charlotte@example.com";
+  form.requestSubmit();
+  await waitFor(() => !app.$("#member-dialog .form-error").hidden, "le message d'erreur");
+  assertIncludes(app.$("#member-dialog .form-error").textContent, "utilise déjà cette adresse e-mail");
+  assertTrue(app.$("#member-dialog").open, "le formulaire devrait rester ouvert");
+});
+
 test("with no member, a message invites to add one", async () => {
   const app = await mountApp({ "GET /members": [] }, { hash: "#members" });
   await waitFor(() => !app.$("#members-empty").hidden);

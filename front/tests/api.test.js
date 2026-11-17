@@ -74,6 +74,43 @@ test("deleteGame returns a French error for game with loan history", async () =>
   assertEqual(error.message, "Suppression impossible : ce jeu a un historique d'emprunts, conservé même quand le jeu est rendu.");
 });
 
+test("updateMember sends a JSON PUT", async () => {
+  const { fetch, calls } = fakeApi({ "PUT /members/m1": [200, { id: "m1" }] });
+  const member = { name: "Camille", email: "camille@example.com"};
+  const updated = await withFakeFetch(fetch, () => api.updateMember("m1", member));
+  assertEqual(calls[0].method, "PUT");
+  assertEqual(calls[0].path, "/members/m1");
+  assertEqual(calls[0].body, member);
+  assertEqual(updated.id, "m1");
+});
+
+test("updateMember returns a French error when email is already used by another member", async () => {
+  const { fetch, calls } = fakeApi ({ "PUT /members/m1": [409, { error: true, reason: "A member with this email already exists"}]});
+  const member = { name: "Camille", email: "camille@example.com"};
+  const error = await expectError(withFakeFetch(fetch, () => api.updateMember("m1", member)));
+  assertEqual(calls[0].method, "PUT");
+  assertEqual(calls[0].path, "/members/m1");
+  assertEqual(error.status, 409);
+  assertEqual(error.message, "Un·e autre adhérent·e utilise déjà cette adresse e-mail.");
+});
+
+test("deleteMember sends DELETE", async () => {
+  const { fetch, calls } = fakeApi({ "DELETE /members/m1": [204]});
+  const result = await withFakeFetch(fetch, () => api.deleteMember("m1"));
+  assertEqual(calls[0].method, "DELETE");
+  assertEqual(calls[0].path, "/members/m1");
+  assertEqual(result, null);
+});
+
+test("deleteMember returns a French error when member has loan history", async () => {
+  const { fetch, calls } = fakeApi ({ "DELETE /members/m1": [409, { error: true, reason: "A member with loans cannot be deleted"}]});
+  const error = await expectError(withFakeFetch(fetch, () => api.deleteMember("m1")));
+  assertEqual(calls[0].method, "DELETE");
+  assertEqual(calls[0].path, "/members/m1");
+  assertEqual(error.status, 409);
+  assertEqual(error.message, "Suppression impossible : cet·te adhérent·e a un historique d'emprunts, conservé même quand tout est rendu.");
+});
+
 // --- erreurs
 
 // Attend qu'une promesse échoue et renvoie l'erreur (échoue si elle réussit).

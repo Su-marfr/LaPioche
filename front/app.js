@@ -214,24 +214,74 @@ async function loadMembers() {
 }
 
 function memberRow(member) {
+  const actions = el("div", {class: "actions"});
+
+  actions.append(
+    button("Modifier", () => openEditMemberDialog(member)),
+    button("Supprimer", () => openDeleteMemberDialog(member), "danger"),
+  );
+  
   return el(
     "li",
     { class: "row" },
     el("div", { class: "row-main" }, el("p", {}, el("strong", {}, member.name)), el("p", { class: "meta" }, member.email)),
+    actions,
   );
 }
 
 const memberDialog = $("#member-dialog");
 const memberForm = $("#member-form");
 
+const deleteMemberDialog = $("#delete-member-dialog");
+const deleteMemberForm = $("#delete-member-form");
+
+let editingMember = null;
+let deletingMember = null;
+
+function openEditMemberDialog(member) {
+  editingMember = member;
+  $("#member-dialog-title").textContent = "Modifier un·e adhérent·e";
+  memberForm.elements.name.value = member.name;
+  memberForm.elements.email.value = member.email;
+
+  showFormError(memberDialog, null);
+  memberDialog.showModal();
+}
+
+function openDeleteMemberDialog(member) {
+  deletingMember = member;
+
+  $("#delete-member-message").textContent = `Voulez-vous vraiment supprimer l'adhérent·e ${member.name} ?`;
+
+  showFormError(deleteMemberDialog, null);
+  deleteMemberDialog.showModal();
+}
+
 $("#add-member").addEventListener("click", () => {
+  editingMember = null;
+  $("#member-dialog-title").textContent = "Ajouter un·e adhérent·e";
   memberForm.reset();
   showFormError(memberDialog, null);
   memberDialog.showModal();
 });
 
-bindSubmit(memberDialog, memberForm, (data) =>
-  api.createMember({ name: data.get("name").trim(), email: data.get("email").trim() }),
-);
+bindSubmit(memberDialog, memberForm, async (data) => {
+  const member = {
+    name: data.get("name").trim(),
+    email: data.get("email").trim(),
+  };
+
+  if (editingMember) {
+    await api.updateMember(editingMember.id, member);
+    editingMember = null;
+  } else {
+    await api.createMember(member);
+  }
+});
+
+bindSubmit(deleteMemberDialog, deleteMemberForm, async () => {
+  await api.deleteMember(deletingMember.id);
+  deletingMember = null;
+});
 
 refresh();

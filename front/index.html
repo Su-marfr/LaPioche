@@ -53,7 +53,7 @@
     </form>
   </dialog>
 
-    <dialog id="delete-game-dialog">
+  <dialog id="delete-game-dialog">
     <form method="dialog" id="delete-game-form" novalidate>
       <h2>Supprimer un jeu</h2>
       <p id="delete-game-message"></p>
@@ -67,13 +67,25 @@
 
   <dialog id="member-dialog">
     <form method="dialog" id="member-form" novalidate>
-      <h2>Ajouter un·e adhérent·e</h2>
+      <h2 id="member-dialog-title">Ajouter un·e adhérent·e</h2>
       <label>Nom <input name="name" required></label>
       <label>Adresse e-mail <input type="email" name="email" required></label>
       <p class="form-error" role="alert" hidden></p>
       <div class="actions">
         <button type="button" data-cancel>Annuler</button>
         <button type="submit" class="primary">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="delete-member-dialog">
+    <form method="dialog" id="delete-member-form" novalidate>
+      <h2>Supprimer un·e adhérent·e</h2>
+      <p id="delete-member-message"></p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="actions">
+        <button type="button" data-cancel>Annuler</button>
+        <button type="submit" class="danger">Confirmer la suppression</button>
       </div>
     </form>
   </dialog>
