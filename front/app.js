@@ -106,8 +106,8 @@ function gameCard(game) {
   if (game.isAvailable) {
     actions.append(button("Emprunter", () => openBorrowDialog(game), "primary"));
   }
-    actions.append(button("Modifier", () => openEditGameDialog(game)));
-    actions.append(button("Supprimer", () => openDeleteGameDialog(game), "danger"));
+  actions.append(button("Modifier", () => openEditGameDialog(game)));
+  actions.append(button("Supprimer", () => openDeleteGameDialog(game), "danger"));
 
   return el(
     "li",
@@ -214,19 +214,56 @@ async function loadMembers() {
 }
 
 function memberRow(member) {
-  const actions = el("div", {class: "actions"});
+  const actions = el("div", { class: "actions" });
 
   actions.append(
+    button("Voir les emprunts", () => openMemberLoansDialog(member)),
     button("Modifier", () => openEditMemberDialog(member)),
     button("Supprimer", () => openDeleteMemberDialog(member), "danger"),
   );
-  
+
   return el(
     "li",
     { class: "row" },
     el("div", { class: "row-main" }, el("p", {}, el("strong", {}, member.name)), el("p", { class: "meta" }, member.email)),
     actions,
   );
+}
+
+const memberLoansDialog = $("#member-loans-dialog");
+
+async function openMemberLoansDialog(member) {
+  await run(async () => {
+    const loans = await api.listMembersLoans(member.id);
+    const games = await api.listGames();
+    const gameById = {};
+    for (const game of games) {
+      gameById[game.id] = game;
+    }
+
+    $("#member-loans-title").textContent = `Emprunts de ${member.name}`;
+    $("#member-loans-empty").hidden = loans.length > 0;
+
+    $("#member-loans-list").replaceChildren(
+      ...loans.map((loan) => {
+        const game = gameById[loan.gameID];
+        let status = "En cours";
+
+        if (loan.returnedAt) {
+          status = "Rendu";
+        } else if (new Date(loan.dueAt) < new Date()) {
+          status = "En retard";
+        }
+        return el(
+          "li", { class: "row" }, el("strong", {}, game ? game.title : "Jeu inconnu"),
+          el("p", {}, `Emprunté le ${formatDate(loan.borrowedAt)}`),
+          el("p", {}, `À rendre le ${formatDate(loan.dueAt)}`),
+          el("strong", {}, status),
+        );
+      }),
+    );
+    memberLoansDialog.showModal();
+  });
 }
 
 const memberDialog = $("#member-dialog");

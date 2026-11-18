@@ -41,6 +41,20 @@ test("createGame sends a JSON POST", async () => {
   assertEqual(created.id, "1");
 });
 
+test("listMembersLoans sends GET with member id", async () => {
+  const { fetch, calls } = fakeApi({ "GET /members/m1/loans": [] });
+  await withFakeFetch(fetch, () => api.listMembersLoans("m1"));
+  assertEqual(calls[0].method, "GET");
+  assertEqual(calls[0].path, "/members/m1/loans");
+});
+
+test("listMembersLoans returns a French error when member does not exist", async () => {
+  const { fetch } = fakeApi({ "GET /members/m1/loans" : [404, {error: true, reason: "Member not found"}] });
+  const error = await expectError(withFakeFetch(fetch, () => api.listMembersLoans("m1")));
+  assertEqual(error.status, 404);
+  assertEqual(error.message, "Cet·te adhérent·e n'existe pas ou a déjà été supprimé·e.");
+});
+
 test("borrow sends the game and the member", async () => {
   const { fetch, calls } = fakeApi({ "POST /loans": [201, { id: "l1" }] });
   await withFakeFetch(fetch, () => api.borrow("g1", "m1"));
