@@ -7,20 +7,21 @@ struct MemberController: RouteCollection {
         members.get(use: index)
         members.post(use: create)
         members.get(":memberID", use: show)
+        members.get(":memberID", "loans", use: loans)
         members.put(":memberID", use: update)
         members.delete(":memberID", use: delete)
     }
-
+    
     @Sendable
     func index(req: Request) async throws -> [MemberDTO] {
         try await Member.query(on: req.db).all().map { $0.toDTO() }
     }
-
+    
     @Sendable
     func create(req: Request) async throws -> Response {
         try CreateMemberDTO.validate(content: req)
         let dto = try req.content.decode(CreateMemberDTO.self)
-
+        
         let emailTaken = try await Member.query(on: req.db)
             .filter(\.$email == dto.email)
             .count() > 0
@@ -31,7 +32,7 @@ struct MemberController: RouteCollection {
         try await member.save(on: req.db)
         return try await member.toDTO().encodeResponse(status: .created, for: req)
     }
-
+    
     @Sendable
     func show(req: Request) async throws -> MemberDTO {
         guard let memberID = req.parameters.get("memberID", as: UUID.self) else {
@@ -42,7 +43,23 @@ struct MemberController: RouteCollection {
         }
         return member.toDTO()
     }
-
+    
+    @Sendable
+    func loans(req: Request) async throws -> Response {
+        guard let memberID = req.parameters.get("memberID", as: UUID.self) else {
+            throw Abort(.badRequest, reason: "Invalid member id")
+        }
+        guard try await Member.find(memberID, on: req.db) != nil else {
+            throw Abort(.notFound, reason: "Member not found")
+        }
+        let loans =  try await Loan.query(on: req.db)
+            .filter(\.$member.$id == memberID)
+            .all()
+        
+        return try await loans.map { $0.toDTO() }
+            .encodeResponse(status: .ok, for: req)
+    }
+    
     @Sendable
     func update(req: Request) async throws -> Response {
         guard let memberID = req.parameters.get("memberID", as: UUID.self) else {
@@ -51,11 +68,11 @@ struct MemberController: RouteCollection {
         guard let member = try await Member.find(memberID, on: req.db) else {
             throw Abort(.notFound, reason: "Member not found")
         }
-
+        
         try UpdateMemberDTO.validate(content: req)
-
+        
         let dto = try req.content.decode(UpdateMemberDTO.self)
-
+        
         let emailTaken = try await Member.query(on: req.db)
             .filter(\.$email == dto.email)
             .filter(\.$id != memberID)
@@ -63,10 +80,10 @@ struct MemberController: RouteCollection {
         guard !emailTaken else {
             throw Abort(.conflict, reason: "A member with this email already exists")
         }
-
+        
         member.name = dto.name
         member.email = dto.email
-
+        
         try await member.save(on: req.db)
         return try await member.toDTO().encodeResponse(status: .ok, for: req)
     }

@@ -12,7 +12,7 @@ final class MemberTests: XCTestCase {
             })
         }
     }
-
+    
     func testCreateMemberWithInvalidEmailIsRejected() async throws {
         try await withApp { app in
             try await app.test(.POST, "members", beforeRequest: { req in
@@ -22,11 +22,11 @@ final class MemberTests: XCTestCase {
             })
         }
     }
-
+    
     func testCreateMemberWithDuplicateEmailReturnsConflict() async throws {
         try await withApp { app in
             _ = try await createMember(app)
-
+            
             try await app.test(.POST, "members", beforeRequest: { req in
                 try req.content.encode(CreateMemberDTO(name: "Autre", email: "camille@example.com"))
             }, afterResponse: { res async throws in
@@ -34,12 +34,95 @@ final class MemberTests: XCTestCase {
             })
         }
     }
-
+    
     func testShowUnknownMemberReturnsNotFound() async throws {
         try await withApp { app in
             try await app.test(.GET, "members/\(UUID())", afterResponse: { res async throws in
                 XCTAssertEqual(res.status, .notFound)
             })
+        }
+    }
+    
+    func testMemberLoansReturnsLoansWithDifferentLoanStates() async throws {
+        try await withApp { app in
+            let member = try await createMember(app)
+            let memberID = try XCTUnwrap(member.id)
+            
+            let returnedGame = try await createGame(app)
+            let currentGame = try await createGame(app)
+            let overdueGame = try await createGame(app)
+            
+            try await insertLoan(
+                app,
+                gameID: try XCTUnwrap(returnedGame.id),
+                memberID: memberID,
+                borrowedAt: .distantPast,
+                dueAt: .distantPast,
+                returnedAt: .now
+            )
+            
+            try await insertLoan(
+                app,
+                gameID: try XCTUnwrap(currentGame.id),
+                memberID: memberID,
+                borrowedAt: .now,
+                dueAt: .distantFuture
+            )
+            
+            try await insertLoan(
+                app,
+                gameID: try XCTUnwrap(overdueGame.id),
+                memberID: memberID,
+                borrowedAt: .distantPast,
+                dueAt: .distantPast
+            )
+            
+            try await app.test(
+                .GET,
+                "members/\(memberID)/loans",
+                afterResponse: { res async throws in
+                    XCTAssertEqual(res.status, .ok)
+                    
+                    let loans = try res.content.decode([LoanDTO].self)
+                    
+                    XCTAssertEqual(loans.count, 3)
+                    XCTAssertEqual(loans.filter { $0.returnedAt != nil }.count, 1)
+                    XCTAssertEqual(loans.filter { $0.returnedAt == nil && $0.dueAt > .now}.count, 1)
+                    XCTAssertEqual(loans.filter { $0.returnedAt == nil && $0.dueAt < .now}.count, 1)
+                }
+            )
+        }
+    }
+    
+    func testMemberLoansReturnsNotFoundWhenMemberDoesNotExist() async throws {
+        try await withApp { app in
+            let memberID = UUID()
+            
+            try await app.test (
+                .GET,
+                "members/\(memberID)/loans",
+                afterResponse: { res async throws in
+                    XCTAssertEqual(res.status, .notFound)
+                }
+            )
+        }
+    }
+    
+    func testMemberLoansReturnsEmptyListWhenMemberHasNoLoans() async throws {
+        try await withApp { app in
+            let member = try await createMember(app)
+            let memberID = try XCTUnwrap(member.id)
+            
+            try await app.test(
+                .GET,
+                "members/\(memberID)/loans",
+                afterResponse: { res async throws in
+                    XCTAssertEqual(res.status, .ok)
+                    
+                    let loans = try res.content.decode([LoanDTO].self)
+                    XCTAssertTrue(loans.isEmpty)
+                }
+            )
         }
     }
     
@@ -85,11 +168,11 @@ final class MemberTests: XCTestCase {
     }
     
     func testUpdateMemberWithInvalidDataReturnsBadRequest() async throws {
-
+        
         try await withApp { app in
             let member = try await createMember(app)
             let memberID = try XCTUnwrap(member.id)
-
+            
             try await app.test(
                 .PUT,
                 "members/\(memberID)",
@@ -106,7 +189,7 @@ final class MemberTests: XCTestCase {
             )
         }
     }
-
+    
     func testUpdateUnknownMemberReturnsNotFound() async throws {
         try await withApp { app in
             try await app.test(
@@ -125,16 +208,16 @@ final class MemberTests: XCTestCase {
             )
         }
     }
-
+    
     func testUpdateMemberWithEmailAlreadyUsedByAnotherMemberReturnsConflict() async throws {
         try await withApp { app in
             let member = try await createMember(app, email: "camille@example.com")
             let anotherMember = try await createMember(app, email: "other@example.com")
-
+            
             let memberID = try XCTUnwrap(member.id)
-
+            
             let anotherMemberEmail = try XCTUnwrap(anotherMember.email)
-
+            
             try await app.test(
                 .PUT,
                 "members/\(memberID)",
@@ -155,7 +238,7 @@ final class MemberTests: XCTestCase {
         try await withApp { app in
             let member = try await createMember(app)
             let memberID = try XCTUnwrap(member.id)
-
+            
             try await app.test(
                 .DELETE,
                 "members/\(memberID)",
@@ -163,7 +246,7 @@ final class MemberTests: XCTestCase {
                     XCTAssertEqual(res.status, .noContent)
                 }
             )
-
+            
             try await app.test(
                 .GET,
                 "members/\(memberID)",
@@ -173,7 +256,7 @@ final class MemberTests: XCTestCase {
             )
         }
     }
-
+    
     func testDeleteUnknownMemberReturnsNotFound() async throws {
         try await withApp { app in
             try await app.test(
@@ -185,16 +268,16 @@ final class MemberTests: XCTestCase {
             )
         }
     }
-
+    
     func testDeleteMemberWithLoanHistoryReturnsConflict() async throws {
         try await withApp { app in
-
+            
             let game = try await createGame(app)
             let member = try await createMember(app)
             
             let gameID = try XCTUnwrap(game.id)
             let memberID = try XCTUnwrap(member.id)
-
+            
             try await insertLoan(
                 app,
                 gameID: gameID,
@@ -202,7 +285,7 @@ final class MemberTests: XCTestCase {
                 borrowedAt: .now,
                 dueAt: .distantFuture
             )
-
+            
             try await app.test(
                 .DELETE,
                 "members/\(memberID)",
@@ -215,13 +298,13 @@ final class MemberTests: XCTestCase {
     
     func testDeleteMemberWithCompletedLoanReturnsConflict() async throws {
         try await withApp { app in
-
+            
             let game = try await createGame(app)
             let member = try await createMember(app)
-
+            
             let gameID = try XCTUnwrap(game.id)
             let memberID = try XCTUnwrap(member.id)
-
+            
             try await insertLoan(
                 app,
                 gameID: gameID,
@@ -230,7 +313,7 @@ final class MemberTests: XCTestCase {
                 dueAt: .distantPast,
                 returnedAt: .now
             )
-
+            
             try await app.test(
                 .DELETE,
                 "members/\(memberID)",
